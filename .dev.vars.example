@@ -16,3 +16,6 @@ WHATSAPP_VERIFY_TOKEN=
 
 # GitHub fine-grained token (this repo only, Contents: read and write)
 GITHUB_TOKEN=
+
+# Optional: who Norma should tell when only a person can fix something ("Avisale a …")
+HELPER_NAME=

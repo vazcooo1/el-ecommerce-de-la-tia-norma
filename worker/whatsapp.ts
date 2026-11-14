@@ -1,5 +1,8 @@
 /** WhatsApp Cloud API: webhook parsing and verification, replies, media download. */
 
+import type { FailureKind } from './failures.ts';
+import { Failure, errorText, guard, statusKind } from './failures.ts';
+
 const GRAPH = 'https://graph.facebook.com/v27.0';
 
 export type WaConfig = { token: string; phoneNumberId: string; fetchFn?: typeof fetch };
@@ -7,14 +10,56 @@ export type WaConfig = { token: string; phoneNumberId: string; fetchFn?: typeof 
 const TIMEOUT_MS = 15_000;
 const USER_AGENT = 'tienda-norma-bot';
 
-async function send(cfg: WaConfig, payload: Record<string, unknown>): Promise<void> {
-  const res = await (cfg.fetchFn ?? fetch)(`${GRAPH}/${cfg.phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${cfg.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...payload }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`WhatsApp send: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
+/** Graph API error codes that mean "try again later": rate limits and outages on Meta's side. */
+const TEMPORARY_CODES = new Set([1, 2, 4, 80007, 130429, 131000, 131016, 131056, 133004]);
+
+/**
+ * An HTTP error from the Graph API, sorted by Meta's error code first, then by status. With `gone`,
+ * a 400 or 404 means the media ID no longer works (WhatsApp keeps media for a limited time).
+ */
+async function graphFailure(res: Response, what: string, gone?: FailureKind): Promise<Failure> {
+  const detail = await res.text().catch(() => '');
+  let code: number | undefined;
+  try {
+    code = (JSON.parse(detail) as { error?: { code?: number } }).error?.code;
+  } catch {
+    // Not JSON: sort by status only.
+  }
+  const kind =
+    code !== undefined && TEMPORARY_CODES.has(code)
+      ? 'temporary'
+      : gone && (res.status === 400 || res.status === 404)
+        ? gone
+        : statusKind(res.status);
+  return new Failure(kind, `WhatsApp ${what}: HTTP ${res.status} ${detail.slice(0, 300)}`);
+}
+
+async function post(cfg: WaConfig, payload: Record<string, unknown>): Promise<void> {
+  const res = await guard('WhatsApp', () =>
+    (cfg.fetchFn ?? fetch)(`${GRAPH}/${cfg.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${cfg.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', ...payload }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    }),
+  );
+  if (!res.ok) throw await graphFailure(res, 'send');
+}
+
+function send(cfg: WaConfig, payload: Record<string, unknown>): Promise<void> {
+  return post(cfg, { recipient_type: 'individual', ...payload });
+}
+
+/**
+ * Blue ticks plus "escribiendo…" on Norma's message, so she sees the bot is on it. WhatsApp shows
+ * it for up to 25 s or until the reply arrives. Best effort: a failure only goes to the logs.
+ */
+export async function showTyping(cfg: WaConfig, messageId: string): Promise<void> {
+  try {
+    await post(cfg, { status: 'read', message_id: messageId, typing_indicator: { type: 'text' } });
+  } catch (e) {
+    console.error('typing indicator failed:', errorText(e));
+  }
 }
 
 export async function sendText(cfg: WaConfig, to: string, body: string): Promise<void> {
@@ -51,17 +96,26 @@ export async function sendConfirmation(
   });
 }
 
-/** Media IDs from webhooks last 7 days; the download URL only 5 minutes, so it is fetched right before use. */
-export async function downloadMedia(cfg: WaConfig, mediaId: string): Promise<{ bytes: Uint8Array; mimeType: string }> {
+/**
+ * Media IDs from webhooks last 7 days; the download URL only 5 minutes, so it is fetched right
+ * before use. `what` names the file in the failure Norma hears if it is gone.
+ */
+export async function downloadMedia(
+  cfg: WaConfig,
+  mediaId: string,
+  what: 'audio' | 'photo',
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
   const fetchFn = cfg.fetchFn ?? fetch;
+  const gone = what === 'audio' ? 'audio-gone' : 'photo-gone';
   // The media host is reported to reject requests without a User-Agent.
   const headers = { authorization: `Bearer ${cfg.token}`, 'user-agent': USER_AGENT };
-  const metaRes = await fetchFn(`${GRAPH}/${mediaId}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!metaRes.ok) throw new Error(`WhatsApp media lookup: HTTP ${metaRes.status}`);
-  const meta = (await metaRes.json()) as { url: string; mime_type: string };
-  const fileRes = await fetchFn(meta.url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!fileRes.ok) throw new Error(`WhatsApp media download: HTTP ${fileRes.status}`);
-  return { bytes: new Uint8Array(await fileRes.arrayBuffer()), mimeType: meta.mime_type };
+  const metaRes = await guard('WhatsApp', () => fetchFn(`${GRAPH}/${mediaId}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) }));
+  if (!metaRes.ok) throw await graphFailure(metaRes, 'media lookup', gone);
+  const meta = await guard('WhatsApp', () => metaRes.json() as Promise<{ url: string; mime_type: string }>);
+  const fileRes = await guard('WhatsApp', () => fetchFn(meta.url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) }));
+  if (!fileRes.ok) throw await graphFailure(fileRes, 'media download', gone);
+  const bytes = await guard('WhatsApp', async () => new Uint8Array(await fileRes.arrayBuffer()));
+  return { bytes, mimeType: meta.mime_type };
 }
 
 /**

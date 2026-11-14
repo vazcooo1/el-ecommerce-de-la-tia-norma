@@ -18,4 +18,6 @@ export interface Env {
   WHATSAPP_VERIFY_TOKEN: string;
   GEMINI_API_KEY: string;
   GITHUB_TOKEN: string;
+  /** Optional: who Norma should tell when something only a person can fix ("Avisale a …"). */
+  HELPER_NAME?: string;
 }

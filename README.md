@@ -40,7 +40,8 @@ compra los manda al número de siempre de Norma.
 
 De la misma forma puede agregar un producto (fotos y un audio con el nombre y el precio), sumar o
 sacar fotos, cambiar nombres o precios, marcar algo sin stock o volver a ponerlo en venta, y borrar
-productos. Puede pedir varias cosas en el mismo audio.
+productos. Puede pedir varias cosas en el mismo audio, y si prefiere escribir, un mensaje o el texto
+al pie de una foto sirven igual (*"jarra verde 12000"* debajo de la foto es un producto nuevo).
 
 ## Cómo funciona
 
@@ -54,6 +55,7 @@ WhatsApp Cloud API (Meta)
 Worker de Cloudflare "tienda-norma"
   ├─ verifica la firma y que el número esté en la lista de permitidos
   └─ Durable Object, uno por número
+       ├─ marca el mensaje como leído y muestra "escribiendo…"
        ├─ junta lo que llega en 5 segundos en un solo "turno"
        ├─ Gemini: audio + catálogo actual → lista de cambios en JSON
        ├─ código: valida los cambios y arma el resumen en castellano
@@ -201,19 +203,42 @@ sencillos.
   build.
 - La IA solo devuelve datos. Nunca escribe archivos.
 
-## Lo que todavía falta
+## Cuando algo falla
 
-Cosas conocidas que quedaron para después de la prueba:
+El código propio está probado. Lo que puede fallar es lo de afuera: GitHub, Gemini, WhatsApp o
+Cloudflare. Para esos casos la regla es que **Norma nunca se queda sin respuesta, y nunca tiene que
+adivinar qué se rompió**. Cada falla termina en un solo mensaje, con una sola cosa para hacer:
 
-- Una foto con texto al pie se toma como foto sola, y el bot pide el audio igual.
-- Si GitHub no responde, Norma recibe *"No entendí bien el audio"*, que confunde.
-- Tocar Sí de nuevo después de un error poco claro al guardar podría aplicar el cambio dos veces.
-- Si Cloudflare reinicia el Durable Object en medio de un turno, ese turno se pierde sin respuesta.
-- Los usuarios de WhatsApp que solo se identifican con nombre de usuario no se pueden agregar a la
-  lista en la práctica.
+| Qué pasó | Qué le dice el bot |
+|---|---|
+| GitHub, Gemini o WhatsApp no responden, tardan demasiado o están saturados; o Cloudflare cortó el turno dos veces | *"La internet está andando mal, te pido que me escribas en un rato para que pruebe de vuelta."* |
+| Se terminó la cuota gratis de Gemini del día | *"Por hoy ya no puedo entender más mensajes. Escribime mañana para que pruebe de vuelta."* |
+| Algo que solo arregla una persona: un token vencido, una clave mal puesta, el catálogo roto a mano o un error del código | *"⚠️ La tienda tiene un problema que no se arregla solo. Avisale a … para que lo arregle. La página sigue funcionando."* |
+| Gemini respondió dos veces algo que no sirve | *"😕 No te entendí bien, ¿me lo mandás de nuevo?"* |
+| WhatsApp ya no tiene el audio o la foto | *"No pude abrir el audio, ¿me lo mandás de nuevo?"* (o *"…una de las fotos…"*) |
 
-Quedan afuera a propósito: pagos, carrito, descripciones, categorías, búsqueda, panel de
-administración y dominio propio (este se puede agregar después sin tocar código).
+Cómo se sostiene eso:
+
+- **"Para que pruebe de vuelta" no le pide repetir nada.** Lo que falló (el audio, las fotos, el
+  toque en Sí) queda guardado. Cuando Norma escribe cualquier cosa, el bot lo intenta de nuevo junto
+  con lo nuevo. Si falla tres veces, deja de insistir y le pide que avise a quien la ayuda.
+- **Cada falla se clasifica por lo que respondió el servicio.** Sin conexión, demoras, errores del
+  servidor o límites por minuto son pasajeros. Credenciales rechazadas o algo que no existe son para
+  una persona. Gemini dice qué cuota se terminó: la del minuto o la del día.
+- **Ningún cambio se publica dos veces.** Cada commit lleva el número del cambio
+  (`[cambio 3f9a2c1d]`). Antes de publicar, el bot mira los últimos commits y, si ya está, solo
+  contesta *"✅ Listo"*. Así, si GitHub guardó el cambio pero la respuesta se perdió, intentarlo de
+  nuevo no lo duplica.
+- **Si Cloudflare corta un turno a la mitad** (un deploy, un reinicio, un límite), los mensajes
+  siguen guardados y una alarma de respaldo retoma el turno a los 3 minutos.
+- **Si ni siquiera se le puede avisar** porque WhatsApp no anda, el bot vuelve a intentar solo cada
+  3 minutos, hasta tres veces.
+- **Mientras trabaja, Norma ve "escribiendo…"** y los tildes azules en su mensaje.
+
+## Lo que queda afuera
+
+A propósito: pagos, carrito, descripciones, categorías, búsqueda, panel de administración y dominio
+propio (este se puede agregar después sin tocar código).
 
 ## Estructura del repo
 
@@ -228,6 +253,7 @@ worker/index.ts               el webhook: firma, lista de números, reparto
 worker/session.ts             el Durable Object: turnos, confirmación, publicación
 worker/agent.ts               Gemini: el pedido, el esquema y las instrucciones
 worker/operations.ts          las "herramientas" de la IA, validadas en código
+worker/failures.ts            qué salió mal, y qué mensaje recibe Norma por eso
 worker/whatsapp.ts            mandar mensajes y bajar fotos de WhatsApp
 worker/github.ts              leer el catálogo y hacer el commit
 scripts/try-agent.ts          probar a Gemini sin WhatsApp

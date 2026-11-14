@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { parseCatalog } from '../shared/catalog.ts';
 import { runAgent } from '../worker/agent.ts';
+import { Failure } from '../worker/failures.ts';
 import type { PendingPhoto } from '../worker/operations.ts';
 
 const AUDIO_TYPES: Record<string, string> = {
@@ -45,6 +46,13 @@ const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 const catalog = parseCatalog(JSON.parse(await readFile('src/data/products.json', 'utf8')));
 const started = Date.now();
-const result = await runAgent({ apiKey, model }, { catalog, pending, proposal: null, history: [], audios, texts });
-console.log(JSON.stringify(result, null, 2));
+try {
+  const result = await runAgent({ apiKey, model }, { catalog, pending, proposal: null, history: [], audios, texts });
+  console.log(JSON.stringify(result, null, 2));
+} catch (e) {
+  if (!(e instanceof Failure)) throw e;
+  // The kind decides what Norma would hear: see failureReply in worker/session.ts.
+  console.error(`Failure (${e.kind}): ${e.message}`);
+  process.exitCode = 1;
+}
 console.error(`(${model}, ${Date.now() - started} ms)`);

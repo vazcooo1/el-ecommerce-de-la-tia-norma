@@ -14,6 +14,7 @@ You will end up with these values:
 | `WHATSAPP_VERIFY_TOKEN` | Worker secret + Meta webhook form | §2 you invent it |
 | `ALLOWED_NUMBERS` | Worker secret | §2 Norma's and your numbers |
 | `GITHUB_TOKEN` | Worker secret | §3 GitHub |
+| `HELPER_NAME` (optional) | Worker secret | §4: the name Norma hears in *"Avisale a …"* |
 | `SITE_URL` | `wrangler.jsonc` → `vars` | §4 first deploy |
 | `PUBLIC_WHATSAPP_NUMBER`, `PUBLIC_SITE_URL` | Workers Builds build variables | §5 |
 
@@ -70,8 +71,8 @@ Never commit secrets or phone numbers. `.dev.vars` is gitignored; copy it from `
 4. This is `GITHUB_TOKEN`.
 
 > **Tokens expire.** Fine-grained tokens have an expiry date, and no alert is sent when it passes.
-> After it expires, every ✅ gets *"No pude guardar el cambio"*. Set a calendar reminder and
-> rotate the token with `npx wrangler secret put GITHUB_TOKEN`.
+> After it expires, every message gets *"La tienda tiene un problema que no se arregla solo.
+> Avisale a …"*. Set a calendar reminder and rotate the token with `npx wrangler secret put GITHUB_TOKEN`.
 
 ## 4. First deploy and the webhook
 
@@ -85,7 +86,12 @@ npx wrangler secret put WHATSAPP_APP_SECRET
 npx wrangler secret put WHATSAPP_VERIFY_TOKEN
 npx wrangler secret put ALLOWED_NUMBERS
 npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put HELPER_NAME      # optional: who Norma should tell when only a person can fix it
 ```
+
+When something breaks that only a person can fix (an expired token, a wrong key), Norma hears
+*"Avisale a {HELPER_NAME} para que lo arregle"*. Without it she hears *"a quien te ayuda con la página"*.
+Every failure and its message is listed in the README, under *"Cuando algo falla"*.
 
 1. Put the printed URL in `wrangler.jsonc` → `vars.SITE_URL`, then run `npx wrangler deploy` again.
    **Commit and push `wrangler.jsonc`** with `SITE_URL` and `WHATSAPP_PHONE_NUMBER_ID` filled in.
@@ -125,5 +131,5 @@ sees the page, remove them in one of two ways:
 1. Save the test number as a contact, e.g. **"Mi Tienda 🏺"**.
 2. Send it **"hola"** once. Replies are free only within 24 h of her last message, so the bot never
    writes first.
-3. She sends audios and photos. Each change comes back with **✅ Sí** / **❌ No** buttons, and nothing
+3. She sends audios, messages and photos (a photo's caption counts as a message). Each change comes back with **✅ Sí** / **❌ No** buttons, and nothing
    is published until she taps Sí. She can ask *"¿qué tengo publicado?"* or *"ayuda"*.
