@@ -1,0 +1,96 @@
+{
+  "products": [
+    {
+      "id": "vasija-luna-gris",
+      "name": "Vasija luna gris",
+      "price": 32000,
+      "inStock": true,
+      "photos": [
+        "vasija-luna-gris/9b54.jpg",
+        "vasija-luna-gris/148b.jpg"
+      ]
+    },
+    {
+      "id": "cuenco-rayado-grande",
+      "name": "Cuenco rayado grande",
+      "price": 18500,
+      "inStock": true,
+      "photos": [
+        "cuenco-rayado-grande/c6e7.jpg",
+        "cuenco-rayado-grande/4263.jpg"
+      ]
+    },
+    {
+      "id": "taza-gatito",
+      "name": "Taza gatito",
+      "price": 9500,
+      "inStock": true,
+      "photos": [
+        "taza-gatito/b1fd.jpg"
+      ]
+    },
+    {
+      "id": "tetera-azul-con-taza",
+      "name": "Tetera azul con taza",
+      "price": 24000,
+      "inStock": true,
+      "photos": [
+        "tetera-azul-con-taza/8b31.jpg"
+      ]
+    },
+    {
+      "id": "jarra-a-rayas",
+      "name": "Jarra a rayas",
+      "price": 16000,
+      "inStock": true,
+      "photos": [
+        "jarra-a-rayas/b900.jpg"
+      ]
+    },
+    {
+      "id": "cuenco-marron-esmaltado",
+      "name": "Cuenco marrón esmaltado",
+      "price": 12000,
+      "inStock": true,
+      "photos": [
+        "cuenco-marron-esmaltado/4017.jpg"
+      ]
+    },
+    {
+      "id": "plato-hondo-verde-agua",
+      "name": "Plato hondo verde agua",
+      "price": 11000,
+      "inStock": true,
+      "photos": [
+        "plato-hondo-verde-agua/9c56.jpg"
+      ]
+    },
+    {
+      "id": "florero-blanco-acanalado",
+      "name": "Florero blanco acanalado",
+      "price": 21000,
+      "inStock": false,
+      "photos": [
+        "florero-blanco-acanalado/8d83.jpg"
+      ]
+    },
+    {
+      "id": "florero-moteado-celeste",
+      "name": "Florero moteado celeste",
+      "price": 27000,
+      "inStock": false,
+      "photos": [
+        "florero-moteado-celeste/8965.jpg"
+      ]
+    },
+    {
+      "id": "plato-de-barro",
+      "name": "Plato de barro",
+      "price": 7500,
+      "inStock": false,
+      "photos": [
+        "plato-de-barro/6614.jpg"
+      ]
+    }
+  ]
+}

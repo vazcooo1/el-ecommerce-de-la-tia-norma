@@ -1,0 +1,29 @@
+{
+  "name": "el-ecommerce-de-la-tia-norma",
+  "version": "1.0.0",
+  "description": "Tienda online de cerámica de Norma: página estática + bot de WhatsApp",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "wrangler dev",
+    "test": "node --test test/",
+    "deploy": "astro build && wrangler deploy"
+  },
+  "license": "GPL-3.0-or-later",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.1.1",
+      "onFail": "download"
+    }
+  },
+  "type": "module",
+  "dependencies": {
+    "astro": "^7.4.11",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261113.1",
+    "wrangler": "^4.161.0"
+  }
+}
