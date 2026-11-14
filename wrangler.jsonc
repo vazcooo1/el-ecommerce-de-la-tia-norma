@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tienda-norma",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // The Astro build. Page and photo requests are served from here without running the script.
+  "assets": { "directory": "./dist" },
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "SESSIONS", "class_name": "SessionDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO"] }],
+  // Non-secret settings. Secrets (tokens, keys, ALLOWED_NUMBERS) go in `wrangler secret put`, see SETUP.md.
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.5-flash-lite",
+    "GITHUB_REPO": "vazcooo1/el-ecommerce-de-la-tia-norma",
+    // The branch the bot reads and commits to: the feature branch while testing, "main" once live.
+    "GITHUB_BRANCH": "feat/tienda-poc",
+    // Set after the first deploy, e.g. "https://tienda-norma.<you>.workers.dev".
+    "SITE_URL": "",
+    // From Meta → WhatsApp → API Setup → "Phone number ID".
+    "WHATSAPP_PHONE_NUMBER_ID": ""
+  }
+}

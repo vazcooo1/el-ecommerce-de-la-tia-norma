@@ -1,0 +1,19 @@
+import type { SessionDO } from './session.ts';
+
+/** Bindings, vars (wrangler.jsonc) and secrets (wrangler secret put). See spec §9. */
+export interface Env {
+  SESSIONS: DurableObjectNamespace<SessionDO>;
+  // vars
+  GEMINI_MODEL: string;
+  GITHUB_REPO: string;
+  GITHUB_BRANCH: string;
+  SITE_URL: string;
+  WHATSAPP_PHONE_NUMBER_ID: string;
+  // secrets
+  ALLOWED_NUMBERS: string;
+  WHATSAPP_TOKEN: string;
+  WHATSAPP_APP_SECRET: string;
+  WHATSAPP_VERIFY_TOKEN: string;
+  GEMINI_API_KEY: string;
+  GITHUB_TOKEN: string;
+}

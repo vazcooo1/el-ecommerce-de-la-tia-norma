@@ -10,13 +10,6 @@
     "deploy": "astro build && wrangler deploy"
   },
   "license": "GPL-3.0-or-later",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.1.1",
-      "onFail": "download"
-    }
-  },
   "type": "module",
   "dependencies": {
     "astro": "^7.4.11",
