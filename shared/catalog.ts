@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Catalog rules (spec §4). Shared by the Astro build and the Worker. */
+/** Catalog rules. Shared by the Astro build and the Worker. */
 
 export const PHOTO_EXTS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const;
 

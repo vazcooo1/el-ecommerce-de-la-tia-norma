@@ -1,7 +1,7 @@
 # Setup
 
 Everything runs on free tiers: Cloudflare Workers, Google AI Studio and the WhatsApp Cloud API
-test number. Do these steps once. Design: `docs/superpowers/specs/2026-11-13-tienda-norma-design.md`.
+test number. Do these steps once. Why it is built this way: [README.md](README.md) (Spanish).
 
 You will end up with these values:
 

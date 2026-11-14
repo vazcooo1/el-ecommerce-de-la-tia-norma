@@ -3,7 +3,7 @@ import { parseCatalog, PHOTO_EXTS } from '../shared/catalog.ts';
 import { formatPrice } from '../shared/format.ts';
 
 /**
- * The agent's "tools": operations Gemini proposes, validated and applied here in code (spec §5).
+ * The agent's "tools": operations Gemini proposes, validated and applied here in code.
  * Gemini never edits the catalog itself.
  */
 

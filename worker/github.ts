@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import type { Catalog } from '../shared/catalog.ts';
 import { parseCatalog } from '../shared/catalog.ts';
 
-/** GitHub as the catalog database: read products.json, write one atomic commit per change (spec §7). */
+/** GitHub as the catalog database: read products.json, write one atomic commit per change. */
 
 const API = 'https://api.github.com';
 export const CATALOG_PATH = 'src/data/products.json';

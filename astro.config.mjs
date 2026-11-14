@@ -3,7 +3,7 @@ import { defineConfig, fontProviders } from 'astro/config';
 
 export default defineConfig({
   site: process.env.PUBLIC_SITE_URL,
-  // One request for the page: CSS goes inline (spec §8 Performance).
+  // One request for the page: CSS goes inline.
   build: { inlineStylesheets: 'always' },
   fonts: [
     {

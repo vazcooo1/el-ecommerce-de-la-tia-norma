@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import type { Catalog } from '../shared/catalog.ts';
 import type { Operation, OpType, PendingPhoto } from './operations.ts';
 
-/** One Gemini call per turn: audio + context in, structured operations out (spec §5). */
+/** One Gemini call per turn: audio + context in, structured operations out. */
 
 export type HistoryEntry = { heard: string; replied: string };
 

@@ -16,7 +16,7 @@ const HISTORY_SIZE = 6;
 
 type Proposal = { id: string; ops: Operation[] };
 
-/** Everything the bot says that is not built from operations (spec §6, §10). */
+/** Everything the bot says that is not built from operations. */
 const MSG = {
   unsupported: 'Por ahora entiendo audios, textos y fotos 🙂',
   stale: 'Ese mensaje era viejo, esto es lo que tengo ahora:\n',
@@ -35,7 +35,7 @@ const confirmBody = (lines: string[]) => `${lines.map((line, i) => `${i + 1}. ${
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * One per allowed sender. Groups messages into turns and keeps the conversation state (spec §6).
+ * One per allowed sender. Groups messages into turns and keeps the conversation state.
  * Storage keys: queue, seen, pending, nextRef, proposal, closed (last finished proposal id), history.
  */
 export class SessionDO extends DurableObject<Env> {
