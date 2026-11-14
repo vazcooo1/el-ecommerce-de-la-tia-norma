@@ -10,7 +10,11 @@ export const PHOTOS_DIR = 'src/assets/products';
 const AUTHOR = { name: 'Bot de la Tienda', email: 'bot@tienda-norma.invalid' };
 
 export type GitHubConfig = { token: string; repo: string; branch: string; fetchFn?: typeof fetch };
-export type FileChange = { path: string; content: Uint8Array | string } | { path: string; delete: true };
+/** New content, an already-uploaded blob (see uploadBlob), or a deletion. */
+export type FileChange =
+  | { path: string; content: Uint8Array | string }
+  | { path: string; blobSha: string }
+  | { path: string; delete: true };
 
 function gh(cfg: GitHubConfig, method: string, path: string, body?: unknown, accept = 'application/vnd.github+json') {
   return (cfg.fetchFn ?? fetch)(`${API}/repos/${cfg.repo}${path}`, {
@@ -23,7 +27,18 @@ function gh(cfg: GitHubConfig, method: string, path: string, body?: unknown, acc
       ...(body !== undefined && { 'content-type': 'application/json' }),
     },
     ...(body !== undefined && { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(15_000),
   });
+}
+
+/** Uploads file content once; the returned blob SHA can be reused across commit retries. */
+export async function uploadBlob(cfg: GitHubConfig, content: Uint8Array | string): Promise<string> {
+  const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content);
+  const blob = await json<{ sha: string }>(
+    await gh(cfg, 'POST', '/git/blobs', { content: bytes.toString('base64'), encoding: 'base64' }),
+    'blob',
+  );
+  return blob.sha;
 }
 
 async function json<T>(res: Response, what: string): Promise<T> {
@@ -51,16 +66,9 @@ export async function commitFiles(
 
   const tree: { path: string; mode: '100644'; type: 'blob'; sha: string | null }[] = [];
   for (const change of changes) {
-    if ('delete' in change) {
-      tree.push({ path: change.path, mode: '100644', type: 'blob', sha: null });
-      continue;
-    }
-    const bytes = typeof change.content === 'string' ? Buffer.from(change.content, 'utf8') : Buffer.from(change.content);
-    const blob = await json<{ sha: string }>(
-      await gh(cfg, 'POST', '/git/blobs', { content: bytes.toString('base64'), encoding: 'base64' }),
-      'blob',
-    );
-    tree.push({ path: change.path, mode: '100644', type: 'blob', sha: blob.sha });
+    const sha =
+      'delete' in change ? null : 'blobSha' in change ? change.blobSha : await uploadBlob(cfg, change.content);
+    tree.push({ path: change.path, mode: '100644', type: 'blob', sha });
   }
 
   const newTree = await json<{ sha: string }>(

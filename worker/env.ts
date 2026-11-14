@@ -3,6 +3,8 @@ import type { SessionDO } from './session.ts';
 /** Bindings, vars (wrangler.jsonc) and secrets (wrangler secret put). See spec §9. */
 export interface Env {
   SESSIONS: DurableObjectNamespace<SessionDO>;
+  /** The deployed dist/: used to check a photo is live before using it as a WhatsApp header. */
+  ASSETS: Fetcher;
   // vars
   GEMINI_MODEL: string;
   GITHUB_REPO: string;

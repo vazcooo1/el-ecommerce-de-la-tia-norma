@@ -69,10 +69,16 @@ Never commit secrets or phone numbers. `.dev.vars` is gitignored; copy it from `
 3. Under **Permissions → Contents**, choose *Read and write*. Metadata read-only is added automatically.
 4. This is `GITHUB_TOKEN`.
 
+> **Tokens expire.** Fine-grained tokens have an expiry date, and no alert is sent when it passes.
+> After it expires, every ✅ gets *"No pude guardar el cambio"*. Set a calendar reminder and
+> rotate the token with `npx wrangler secret put GITHUB_TOKEN`.
+
 ## 4. First deploy and the webhook
 
 ```bash
-pnpm build && npx wrangler deploy        # prints https://tienda-norma.<you>.workers.dev
+# The page needs Norma's sales number at build time. You can also put PUBLIC_WHATSAPP_NUMBER
+# (and later PUBLIC_SITE_URL) in a local .env file, which is gitignored.
+PUBLIC_WHATSAPP_NUMBER=549XXXXXXXXXX pnpm build && npx wrangler deploy   # prints https://tienda-norma.<you>.workers.dev
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put WHATSAPP_TOKEN
 npx wrangler secret put WHATSAPP_APP_SECRET
@@ -82,6 +88,9 @@ npx wrangler secret put GITHUB_TOKEN
 ```
 
 1. Put the printed URL in `wrangler.jsonc` → `vars.SITE_URL`, then run `npx wrangler deploy` again.
+   **Commit and push `wrangler.jsonc`** with `SITE_URL` and `WHATSAPP_PHONE_NUMBER_ID` filled in.
+   They are not secrets, and Workers Builds deploys whatever is in git, so empty values there
+   would break the bot on the next automatic deploy.
 2. In Meta, go to **WhatsApp → Configuration → Webhook → Edit**:
    - Callback URL: `https://tienda-norma.<you>.workers.dev/webhook`
    - Verify token: your `WHATSAPP_VERIFY_TOKEN`
@@ -101,7 +110,17 @@ testing and `main` once live.
    - `PUBLIC_SITE_URL`: the workers.dev URL, used for link previews.
 4. Each commit the bot makes to `main` now rebuilds the page, which takes a few minutes.
 
-## 6. Norma
+## 6. Before sharing the page: remove the sample products
+
+The 10 seed products are **sample photos of museum pieces** from Wikimedia Commons (CC0, see
+`src/assets/products/CREDITS.md`). Their buy buttons point at Norma's real number. Before anyone
+sees the page, remove them in one of two ways:
+- Norma says *"borrá …"* for each one through the bot.
+- Or clear them in one commit: set `src/data/products.json` to `{ "products": [] }` and delete the
+  folders under `src/assets/products/` (keep `CREDITS.md` or delete it too). With no products, the
+  page shows *"Muy pronto vas a ver acá las piezas de Norma."*
+
+## 7. Norma
 
 1. Save the test number as a contact, e.g. **"Mi Tienda 🏺"**.
 2. Send it **"hola"** once. Replies are free only within 24 h of her last message, so the bot never

@@ -81,6 +81,7 @@ Reglas:
 - Fotos pendientes: si Norma no dice para qué son y no se deduce, preguntá.
 - Si Norma pregunta qué tiene publicado, kind="info" y en reply listá cada producto con su precio y si está sin stock.
 - Si Norma pide ayuda o no sabe qué decir, kind="info" y en reply explicá con ejemplos: "La taza azul ahora sale 9000", "El plato hondo se vendió", "Producto nuevo: jarra verde, 12000 (con las fotos)", "Sacá la segunda foto de la taza azul", "Borrá el plato hondo", "¿Qué tengo publicado?".
+- En cada operación incluí solo los campos que cambian; no mandes campos vacíos ni en cero.
 - En "heard" escribí lo que entendiste que dijo Norma. En kind="proposal", reply puede ir vacío.`;
 
 /** The text part of the request: current state, one JSON block per heading. */
@@ -143,6 +144,7 @@ export async function runAgent(
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.apiKey },
         body,
+        signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) throw new AgentError(`Gemini HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
       const data = (await res.json()) as {
@@ -171,16 +173,19 @@ function parseResult(raw: unknown): AgentResult {
   ) {
     throw new AgentError(`Respuesta inválida de Gemini: ${JSON.stringify(raw).slice(0, 300)}`);
   }
+  // Models often fill optional fields with "" or 0. Treat those as "not mentioned", so a price
+  // change with name:"" is not rejected as a bad name. (A real 0 price is never valid anyway.)
+  const given = (v: unknown) => v !== undefined && v !== null && v !== '' && v !== 0;
   const operations: Operation[] = r.operations
     .filter((op) => op && OP_TYPES.includes(op.type))
     .map((op) => ({
       type: op.type,
-      ...(op.productId !== undefined && { productId: op.productId }),
-      ...(op.name !== undefined && { name: op.name }),
-      ...(op.price !== undefined && { price: op.price }),
-      ...(op.inStock !== undefined && { inStock: op.inStock }),
-      ...(op.photoRefs !== undefined && { photoRefs: op.photoRefs }),
-      ...(op.photoNumber !== undefined && { photoNumber: op.photoNumber }),
+      ...(given(op.productId) && { productId: op.productId }),
+      ...(given(op.name) && { name: op.name }),
+      ...(given(op.price) && { price: op.price }),
+      ...(typeof op.inStock === 'boolean' && { inStock: op.inStock }),
+      ...(Array.isArray(op.photoRefs) && { photoRefs: op.photoRefs }),
+      ...(given(op.photoNumber) && { photoNumber: op.photoNumber }),
     }));
   return { heard: r.heard, kind: r.kind as AgentResult['kind'], operations, reply: r.reply };
 }

@@ -1,5 +1,5 @@
 import type { Env } from './env.ts';
-import { isAllowed, parseWebhook, verifySignature } from './whatsapp.ts';
+import { failedStatuses, isAllowed, parseWebhook, verifySignature } from './whatsapp.ts';
 
 export { SessionDO } from './session.ts';
 
@@ -33,6 +33,8 @@ export default {
       } catch {
         return new Response('ok');
       }
+      // A reply WhatsApp could not deliver (e.g. a header image it could not fetch) only shows up here.
+      for (const failure of failedStatuses(body)) console.error(`WhatsApp delivery failed: ${failure}`);
       for (const msg of parseWebhook(body)) {
         // Unknown senders are ignored silently (no reply, still 200 so Meta does not retry).
         if (!isAllowed(msg, env.ALLOWED_NUMBERS ?? '')) {

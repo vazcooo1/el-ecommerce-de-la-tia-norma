@@ -101,6 +101,21 @@ test('rejects bad input', () => {
   fails([{ type: 'remove_product', productId: 'taza-azul' }, { type: 'set_stock', productId: 'taza-azul', inStock: false }], ERR.conflict);
 });
 
+test('unchanged values are skipped and a change that changes nothing is rejected', () => {
+  const plan = ok([{ type: 'update_product', productId: 'taza-azul', name: 'Taza azul', price: 9000 }]);
+  assert.deepEqual(plan.summaryLines, [`Cambiar precio de *Taza azul*: ${formatPrice(8000)} → *${formatPrice(9000)}*`]);
+  fails([{ type: 'update_product', productId: 'taza-azul', price: 8000 }], ERR.noChange);
+  fails([{ type: 'set_stock', productId: 'plato-hondo', inStock: true }], ERR.noChange);
+});
+
+test('at most 10 new photos per change', () => {
+  const pending = Array.from({ length: 11 }, (_, i) => photo(`p${i + 1}`));
+  fails([
+    { type: 'add_product', name: 'Jarra', price: 100, photoRefs: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'] },
+    { type: 'add_product', name: 'Vaso', price: 100, photoRefs: ['p7', 'p8', 'p9', 'p10', 'p11'] },
+  ], ERR.tooManyNewPhotos, pending);
+});
+
 test('cancel', () => {
   assert.equal(isCancel([{ type: 'cancel' }]), true);
   assert.equal(isCancel([{ type: 'cancel' }, { type: 'remove_product', productId: 'taza-azul' }]), false);

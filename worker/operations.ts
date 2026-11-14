@@ -53,9 +53,13 @@ export const ERR = {
   conflict: 'Me pediste cosas que se contradicen para el mismo producto. ¿Me lo decís de nuevo?',
   tooManyPhotos: 'Un producto puede tener hasta 10 fotos.',
   badPhotoType: 'Esa foto no la puedo usar. Mandala como foto común, por favor.',
+  noChange: 'Eso ya está así en la página 🙂',
+  tooManyNewPhotos: 'Mandame hasta 10 fotos por vez, por favor.',
 };
 
 const MAX_PHOTOS = 10;
+/** Keeps one publish under the Workers Free limit of 50 subrequests (3 per new photo + ~15). */
+const MAX_NEW_PHOTOS = 10;
 
 /** Exactly one operation and it is `cancel`. */
 export function isCancel(ops: Operation[]): boolean {
@@ -143,6 +147,7 @@ function prevalidate(original: Map<string, Product>, ops: Operation[], pending: 
       }
     }
   }
+  if (usedRefs.size > MAX_NEW_PHOTOS) reject(ERR.tooManyNewPhotos);
 }
 
 function build(catalog: Catalog, ops: Operation[], pending: PendingPhoto[], randomHex: () => string): Plan {
@@ -194,27 +199,34 @@ function build(catalog: Catalog, ops: Operation[], pending: PendingPhoto[], rand
     if (!touched.includes(product.id)) touched.push(product.id);
 
     switch (op.type) {
+      // Fields equal to the current value are skipped: no "Taza → Taza" lines, no empty commits.
       case 'update_product': {
         if (op.name !== undefined) {
           const name = cleanName(op.name);
           if (!validName(name)) reject(ERR.badName);
-          summaryLines.push(`Cambiar nombre: *${product.name}* → *${name}*`);
-          product.name = name;
+          if (name !== product.name) {
+            summaryLines.push(`Cambiar nombre: *${product.name}* → *${name}*`);
+            product.name = name;
+          }
         }
         if (op.price !== undefined) {
           if (!validPrice(op.price)) reject(ERR.badPrice);
-          summaryLines.push(
-            `Cambiar precio de *${product.name}*: ${formatPrice(product.price)} → *${formatPrice(op.price)}*`,
-          );
-          product.price = op.price;
+          if (op.price !== product.price) {
+            summaryLines.push(
+              `Cambiar precio de *${product.name}*: ${formatPrice(product.price)} → *${formatPrice(op.price)}*`,
+            );
+            product.price = op.price;
+          }
         }
         break;
       }
       case 'set_stock':
-        product.inStock = op.inStock!;
-        summaryLines.push(
-          op.inStock ? `Volver a poner *${product.name}* EN VENTA` : `Marcar *${product.name}* como ✖ SIN STOCK`,
-        );
+        if (op.inStock !== product.inStock) {
+          product.inStock = op.inStock!;
+          summaryLines.push(
+            op.inStock ? `Volver a poner *${product.name}* EN VENTA` : `Marcar *${product.name}* como ✖ SIN STOCK`,
+          );
+        }
         break;
       case 'add_photos': {
         const refs = op.photoRefs ?? [];
@@ -236,6 +248,8 @@ function build(catalog: Catalog, ops: Operation[], pending: PendingPhoto[], rand
         break;
     }
   }
+
+  if (summaryLines.length === 0) reject(ERR.noChange);
 
   const kept = products.filter((p) => !removedProducts.has(p.id));
   for (const p of kept) {

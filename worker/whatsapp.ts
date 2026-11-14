@@ -4,11 +4,15 @@ const GRAPH = 'https://graph.facebook.com/v27.0';
 
 export type WaConfig = { token: string; phoneNumberId: string; fetchFn?: typeof fetch };
 
+const TIMEOUT_MS = 15_000;
+const USER_AGENT = 'tienda-norma-bot';
+
 async function send(cfg: WaConfig, payload: Record<string, unknown>): Promise<void> {
   const res = await (cfg.fetchFn ?? fetch)(`${GRAPH}/${cfg.phoneNumberId}/messages`, {
     method: 'POST',
     headers: { authorization: `Bearer ${cfg.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...payload }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`WhatsApp send: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
 }
@@ -50,13 +54,42 @@ export async function sendConfirmation(
 /** Media IDs from webhooks last 7 days; the download URL only 5 minutes, so it is fetched right before use. */
 export async function downloadMedia(cfg: WaConfig, mediaId: string): Promise<{ bytes: Uint8Array; mimeType: string }> {
   const fetchFn = cfg.fetchFn ?? fetch;
-  const auth = { authorization: `Bearer ${cfg.token}` };
-  const metaRes = await fetchFn(`${GRAPH}/${mediaId}`, { headers: auth });
+  // The media host is reported to reject requests without a User-Agent.
+  const headers = { authorization: `Bearer ${cfg.token}`, 'user-agent': USER_AGENT };
+  const metaRes = await fetchFn(`${GRAPH}/${mediaId}`, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!metaRes.ok) throw new Error(`WhatsApp media lookup: HTTP ${metaRes.status}`);
   const meta = (await metaRes.json()) as { url: string; mime_type: string };
-  const fileRes = await fetchFn(meta.url, { headers: auth });
+  const fileRes = await fetchFn(meta.url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!fileRes.ok) throw new Error(`WhatsApp media download: HTTP ${fileRes.status}`);
   return { bytes: new Uint8Array(await fileRes.arrayBuffer()), mimeType: meta.mime_type };
+}
+
+/**
+ * The image type from the file's first bytes, or null if it is not JPEG/PNG/WebP.
+ * A non-image committed as a photo would break every later build, so photos are checked first.
+ */
+export function sniffImage(bytes: Uint8Array): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  const b = (i: number) => bytes[i] ?? -1;
+  if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return 'image/jpeg';
+  if (b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4e && b(3) === 0x47) return 'image/png';
+  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  if (bytes.length > 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+/** Delivery failures reported by Meta (`value.statuses[]` with status "failed"), for the logs. */
+export function failedStatuses(body: unknown): string[] {
+  type Status = { status?: string; errors?: { code?: number; title?: string }[] };
+  type WithStatuses = { entry?: { changes?: { value?: { statuses?: Status[] } }[] }[] };
+  const out: string[] = [];
+  for (const entry of (body as WithStatuses)?.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const s of change.value?.statuses ?? []) {
+        if (s.status === 'failed') out.push((s.errors ?? []).map((e) => `${e.code} ${e.title}`).join('; ') || 'unknown');
+      }
+    }
+  }
+  return out;
 }
 
 export type IncomingMessage = {
@@ -97,6 +130,8 @@ export function parseWebhook(body: unknown): IncomingMessage[] {
       for (const m of change.value?.messages ?? []) {
         const sender = m.from ?? m.from_user_id;
         if (!sender || !m.id) continue;
+        // A 👍 on "Listo" is not a request: no turn, no "solo entiendo audios" reply.
+        if (m.type === 'reaction') continue;
         const base = {
           id: m.id,
           sender,
