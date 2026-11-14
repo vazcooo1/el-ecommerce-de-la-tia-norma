@@ -1,4 +1,63 @@
-/** WhatsApp Cloud API: webhook parsing and verification. */
+/** WhatsApp Cloud API: webhook parsing and verification, replies, media download. */
+
+const GRAPH = 'https://graph.facebook.com/v27.0';
+
+export type WaConfig = { token: string; phoneNumberId: string; fetchFn?: typeof fetch };
+
+async function send(cfg: WaConfig, payload: Record<string, unknown>): Promise<void> {
+  const res = await (cfg.fetchFn ?? fetch)(`${GRAPH}/${cfg.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${cfg.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...payload }),
+  });
+  if (!res.ok) throw new Error(`WhatsApp send: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
+}
+
+export async function sendText(cfg: WaConfig, to: string, body: string): Promise<void> {
+  await send(cfg, { to, type: 'text', text: { preview_url: false, body: body.slice(0, 4096) } });
+}
+
+/** ✅ Sí / ❌ No buttons tied to one proposal. Bodies over 1024 chars go first as plain text. */
+export async function sendConfirmation(
+  cfg: WaConfig,
+  to: string,
+  body: string,
+  proposalId: string,
+  headerImageUrl?: string,
+): Promise<void> {
+  let text = body;
+  if (text.length > 1024) {
+    await sendText(cfg, to, body);
+    text = '¿Está bien?';
+  }
+  await send(cfg, {
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      ...(headerImageUrl && { header: { type: 'image', image: { link: headerImageUrl } } }),
+      body: { text },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: `yes:${proposalId}`, title: '✅ Sí' } },
+          { type: 'reply', reply: { id: `no:${proposalId}`, title: '❌ No' } },
+        ],
+      },
+    },
+  });
+}
+
+/** Media IDs from webhooks last 7 days; the download URL only 5 minutes, so it is fetched right before use. */
+export async function downloadMedia(cfg: WaConfig, mediaId: string): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  const fetchFn = cfg.fetchFn ?? fetch;
+  const auth = { authorization: `Bearer ${cfg.token}` };
+  const metaRes = await fetchFn(`${GRAPH}/${mediaId}`, { headers: auth });
+  if (!metaRes.ok) throw new Error(`WhatsApp media lookup: HTTP ${metaRes.status}`);
+  const meta = (await metaRes.json()) as { url: string; mime_type: string };
+  const fileRes = await fetchFn(meta.url, { headers: auth });
+  if (!fileRes.ok) throw new Error(`WhatsApp media download: HTTP ${fileRes.status}`);
+  return { bytes: new Uint8Array(await fileRes.arrayBuffer()), mimeType: meta.mime_type };
+}
 
 export type IncomingMessage = {
   id: string;
