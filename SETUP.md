@@ -97,8 +97,8 @@ npx wrangler secret put GITHUB_TOKEN
    - Click **Verify and save**, then under **Webhook fields** subscribe to **messages**.
 3. Watch it live: `npx wrangler tail`.
 
-`vars.GITHUB_BRANCH` is the branch the bot reads and commits to. It is `feat/tienda-poc` while
-testing and `main` once live.
+`vars.GITHUB_BRANCH` is the branch the bot reads and commits to: `main`. Push `main` to GitHub
+before Norma's first audio, because the bot reads the catalog from GitHub, not from your machine.
 
 ## 5. Automatic deploys (Workers Builds)
 

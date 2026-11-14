@@ -15,8 +15,8 @@
   "vars": {
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
     "GITHUB_REPO": "vazcooo1/el-ecommerce-de-la-tia-norma",
-    // The branch the bot reads and commits to: the feature branch while testing, "main" once live.
-    "GITHUB_BRANCH": "feat/tienda-poc",
+    // The branch the bot reads and commits to. It must exist on GitHub (push it before the first deploy).
+    "GITHUB_BRANCH": "main",
     // Set after the first deploy, e.g. "https://tienda-norma.<you>.workers.dev".
     "SITE_URL": "",
     // From Meta → WhatsApp → API Setup → "Phone number ID".
