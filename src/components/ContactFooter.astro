@@ -1,0 +1,18 @@
+---
+import { contactLink } from '../../shared/format.ts';
+import WhatsAppIcon from './WhatsAppIcon.astro';
+
+interface Props {
+  number: string;
+}
+
+const { number } = Astro.props;
+---
+
+<footer class="footer">
+  <h2>¿Preguntas?</h2>
+  <a class="buy" href={contactLink(number)}>
+    <WhatsAppIcon />
+    <span>ESCRIBILE A NORMA</span>
+  </a>
+</footer>

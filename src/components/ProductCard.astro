@@ -1,0 +1,37 @@
+---
+import type { ImageMetadata } from 'astro';
+import type { Product } from '../../shared/catalog.ts';
+import { buyLink, formatPrice } from '../../shared/format.ts';
+import Gallery from './Gallery.astro';
+import WhatsAppIcon from './WhatsAppIcon.astro';
+
+interface Props {
+  product: Product;
+  images: ImageMetadata[];
+  number: string;
+  eager: boolean;
+}
+
+const { product, images, number, eager } = Astro.props;
+---
+
+<article class:list={['card', { soldout: !product.inStock }]}>
+  <h2 class="name">
+    {product.name}
+    {!product.inStock && <span class="badge">✖ SIN STOCK</span>}
+  </h2>
+  <Gallery name={product.name} images={images} eager={eager}>
+    {!product.inStock && <span class="badge badge-photo" aria-hidden="true">✖ SIN STOCK</span>}
+  </Gallery>
+  <p class="price">{formatPrice(product.price)}</p>
+  {
+    product.inStock ? (
+      <a class="buy" href={buyLink(number, product.name)}>
+        <WhatsAppIcon />
+        <span>COMPRAR POR WHATSAPP</span>
+      </a>
+    ) : (
+      <p class="soldout-block">Sin stock por ahora</p>
+    )
+  }
+</article>
