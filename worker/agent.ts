@@ -1,0 +1,186 @@
+import { Buffer } from 'node:buffer';
+import type { Catalog } from '../shared/catalog.ts';
+import type { Operation, OpType, PendingPhoto } from './operations.ts';
+
+/** One Gemini call per turn: audio + context in, structured operations out (spec §5). */
+
+export type HistoryEntry = { heard: string; replied: string };
+
+export type AgentInput = {
+  catalog: Catalog;
+  pending: PendingPhoto[];
+  proposal: Operation[] | null;
+  history: HistoryEntry[];
+  audios: { bytes: Uint8Array; mimeType: string }[];
+  texts: string[];
+};
+
+export type AgentResult = {
+  heard: string;
+  kind: 'proposal' | 'question' | 'info';
+  operations: Operation[];
+  reply: string;
+};
+
+export class AgentError extends Error {}
+
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+
+const OP_TYPES: OpType[] = [
+  'add_product',
+  'update_product',
+  'set_stock',
+  'add_photos',
+  'remove_photo',
+  'remove_product',
+  'cancel',
+];
+
+export const RESPONSE_SCHEMA = {
+  type: 'object',
+  required: ['heard', 'kind', 'operations', 'reply'],
+  properties: {
+    heard: { type: 'string' },
+    kind: { type: 'string', enum: ['proposal', 'question', 'info'] },
+    reply: { type: 'string' },
+    operations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['type'],
+        properties: {
+          type: { type: 'string', enum: OP_TYPES },
+          productId: { type: 'string' },
+          name: { type: 'string' },
+          price: { type: 'integer' },
+          inStock: { type: 'boolean' },
+          photoRefs: { type: 'array', items: { type: 'string' } },
+          photoNumber: { type: 'integer' },
+        },
+      },
+    },
+  },
+};
+
+export const SYSTEM_PROMPT = `Sos el asistente de la tienda online de Norma, una señora que hace cerámica artesanal. Norma te habla por audios de WhatsApp para cambiar los productos de su página. Respondé siempre en español rioplatense, corto, cálido y muy simple.
+
+Podés proponer estas operaciones:
+- add_product: producto nuevo. Necesita name, price (pesos, número entero) y photoRefs con al menos una foto pendiente (p1, p2…).
+- update_product: cambiar name y/o price de un producto existente (productId).
+- set_stock: inStock=false para "sin stock / se vendió / no hay más"; inStock=true para "volvió a haber / hay de nuevo".
+- add_photos: agregar fotos pendientes (photoRefs) a un producto existente.
+- remove_photo: sacar una foto; photoNumber empieza en 1 ("la primera foto" = 1).
+- remove_product: sacar el producto de la página.
+- cancel: Norma no quiere el cambio pendiente ("no, dejá", "olvidate").
+
+Reglas:
+- Usá solo productId del CATÁLOGO ACTUAL. Si no está claro de qué producto habla, kind="question" y preguntá mostrando las opciones numeradas por nombre.
+- Nunca inventes precios ni nombres. Si falta un dato, kind="question".
+- Si hay un CAMBIO PENDIENTE, el mensaje nuevo puede corregirlo, completarlo o cancelarlo: devolvé SIEMPRE la propuesta completa actualizada (incluyendo lo pendiente que siga valiendo).
+- Los precios se dicen como "nueve mil", "9.000", "9 lucas": convertilos a número entero (9000).
+- Fotos pendientes: si Norma no dice para qué son y no se deduce, preguntá.
+- Si Norma pregunta qué tiene publicado, kind="info" y en reply listá cada producto con su precio y si está sin stock.
+- Si Norma pide ayuda o no sabe qué decir, kind="info" y en reply explicá con ejemplos: "La taza azul ahora sale 9000", "El plato hondo se vendió", "Producto nuevo: jarra verde, 12000 (con las fotos)", "Sacá la segunda foto de la taza azul", "Borrá el plato hondo", "¿Qué tengo publicado?".
+- En "heard" escribí lo que entendiste que dijo Norma. En kind="proposal", reply puede ir vacío.`;
+
+/** The text part of the request: current state, one JSON block per heading. */
+export function buildContext(input: AgentInput): string {
+  const block = (title: string, value: unknown) => `${title}\n${JSON.stringify(value)}`;
+  return [
+    block(
+      'CATÁLOGO ACTUAL:',
+      input.catalog.products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        inStock: p.inStock,
+        fotos: p.photos.length,
+      })),
+    ),
+    block(
+      'FOTOS PENDIENTES:',
+      input.pending.map((p) => ({ ref: p.ref, caption: p.caption ?? '' })),
+    ),
+    input.proposal ? block('CAMBIO PENDIENTE (sin confirmar):', input.proposal) : 'CAMBIO PENDIENTE (sin confirmar):\nninguno',
+    block(
+      'CONVERSACIÓN RECIENTE:',
+      input.history.map((h) => ({ norma: h.heard, bot: h.replied })),
+    ),
+    block('MENSAJES DE TEXTO:', input.texts),
+    input.audios.length > 0 ? 'Los audios adjuntos son lo que Norma pide ahora.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** Calls Gemini; retries once on an HTTP error or an invalid answer, then throws AgentError. */
+export async function runAgent(
+  cfg: { apiKey: string; model: string; fetchFn?: typeof fetch },
+  input: AgentInput,
+): Promise<AgentResult> {
+  const fetchFn = cfg.fetchFn ?? fetch;
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: buildContext(input) },
+          ...input.audios.map((a) => ({
+            // WhatsApp sends "audio/ogg; codecs=opus"; Gemini lists the bare type.
+            inline_data: { mime_type: a.mimeType.split(';')[0]!.trim(), data: Buffer.from(a.bytes).toString('base64') },
+          })),
+        ],
+      },
+    ],
+    generationConfig: { responseMimeType: 'application/json', responseJsonSchema: RESPONSE_SCHEMA },
+  });
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetchFn(`${GEMINI}/models/${cfg.model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.apiKey },
+        body,
+      });
+      if (!res.ok) throw new AgentError(`Gemini HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
+      const data = (await res.json()) as {
+        candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+      };
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .filter((p) => !p.thought)
+        .map((p) => p.text ?? '')
+        .join('');
+      return parseResult(JSON.parse(text));
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError instanceof AgentError ? lastError : new AgentError(String(lastError));
+}
+
+function parseResult(raw: unknown): AgentResult {
+  const r = raw as Partial<AgentResult> | null;
+  if (
+    !r ||
+    typeof r.heard !== 'string' ||
+    !['proposal', 'question', 'info'].includes(r.kind as string) ||
+    !Array.isArray(r.operations) ||
+    typeof r.reply !== 'string'
+  ) {
+    throw new AgentError(`Respuesta inválida de Gemini: ${JSON.stringify(raw).slice(0, 300)}`);
+  }
+  const operations: Operation[] = r.operations
+    .filter((op) => op && OP_TYPES.includes(op.type))
+    .map((op) => ({
+      type: op.type,
+      ...(op.productId !== undefined && { productId: op.productId }),
+      ...(op.name !== undefined && { name: op.name }),
+      ...(op.price !== undefined && { price: op.price }),
+      ...(op.inStock !== undefined && { inStock: op.inStock }),
+      ...(op.photoRefs !== undefined && { photoRefs: op.photoRefs }),
+      ...(op.photoNumber !== undefined && { photoNumber: op.photoNumber }),
+    }));
+  return { heard: r.heard, kind: r.kind as AgentResult['kind'], operations, reply: r.reply };
+}

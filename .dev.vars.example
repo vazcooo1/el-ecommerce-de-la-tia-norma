@@ -1,0 +1,18 @@
+# Copy to .dev.vars (gitignored) and fill in.
+# Used by `wrangler dev` and by `node --env-file=.dev.vars scripts/try-agent.ts`.
+# In production these are Worker secrets: `npx wrangler secret put <NAME>` (see SETUP.md).
+
+# Google AI Studio
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash-lite
+
+# Comma-separated sender numbers allowed to use the bot, digits only (e.g. 5491112345678,5491187654321)
+ALLOWED_NUMBERS=
+
+# Meta WhatsApp Cloud API
+WHATSAPP_TOKEN=
+WHATSAPP_APP_SECRET=
+WHATSAPP_VERIFY_TOKEN=
+
+# GitHub fine-grained token (this repo only, Contents: read and write)
+GITHUB_TOKEN=
